@@ -1,4 +1,4 @@
-from typing import Collection, List, Tuple
+from typing import Collection, List, Tuple, Optional
 
 from kopf._cogs.clients import api
 from kopf._cogs.configs import configuration
@@ -25,19 +25,33 @@ async def list_objs(
 
     * The resource is namespace-scoped AND operator is namespaced-restricted.
     """
-    rsp = await api.get(
-        url=resource.get_url(namespace=namespace),
-        logger=logger,
-        settings=settings,
-    )
-
     items: List[bodies.RawBody] = []
-    resource_version = rsp.get('metadata', {}).get('resourceVersion', None)
-    for item in rsp.get('items', []):
-        if 'kind' in rsp:
-            item.setdefault('kind', rsp['kind'][:-4] if rsp['kind'][-4:] == 'List' else rsp['kind'])
-        if 'apiVersion' in rsp:
-            item.setdefault('apiVersion', rsp['apiVersion'])
-        items.append(item)
+    page_limit = settings.watching.pagination_limit
+    continue_token: Optional[str] = None
+    resource_version: Optional[str] = None
+    while True:
+        params = {}
+        if page_limit is not None:
+            params['limit'] = page_limit
+        if continue_token:
+            params['continue'] = continue_token
+        rsp = await api.get(
+            url=resource.get_url(namespace=namespace, params=params),
+            logger=logger,
+            settings=settings,
+        )
+
+        resource_version = rsp.get('metadata', {}).get('resourceVersion', None)
+        for item in rsp.get('items', []):
+            if 'kind' in rsp:
+                item.setdefault('kind', rsp['kind'][:-4] if rsp['kind'][-4:] == 'List' else rsp['kind'])
+            if 'apiVersion' in rsp:
+                item.setdefault('apiVersion', rsp['apiVersion'])
+            items.append(item)
+
+        continue_token = rsp.get('metadata', {}).get('continue', None)
+        if not continue_token:
+            break
+        logger.debug(f'Fetching more {resource.plural} with continue token {continue_token}.')
 
     return items, resource_version

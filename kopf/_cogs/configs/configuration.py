@@ -190,6 +190,12 @@ class WatchingSettings:
     How long should a pause be between watch requests (to prevent API flooding).
     """
 
+    pagination_limit: Optional[int] = None
+    """
+    The maximum number of items to request in each LIST request made during calls
+    to ``fetching.list_objs``. If ``None``, no pagination occurs.
+    """
+
 
 @dataclasses.dataclass
 class BatchingSettings:
